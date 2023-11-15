@@ -51,14 +51,8 @@ export async function autodiscoverRepositories(
 
   if (autodiscoverFilter) {
     logger.debug({ autodiscoverFilter }, 'Applying autodiscoverFilter');
-    const addFilters = is.string(autodiscoverFilter)
-      ? [autodiscoverFilter]
-      : autodiscoverFilter;
-    const removeFilters = autodiscoverExclusions
-      ? is.string(autodiscoverExclusions)
-        ? [autodiscoverExclusions]
-        : autodiscoverExclusions
-      : [];
+    const addFilters = prepareFilter(autodiscoverFilter);
+    const removeFilters = prepareFilter(autodiscoverExclusions);
     discovered = applyFilters(discovered, addFilters, removeFilters);
 
     if (!discovered.length) {
@@ -100,33 +94,43 @@ export async function autodiscoverRepositories(
   return { ...config, repositories: discovered };
 }
 
+function prepareFilter(filter: string | string[] | undefined): string[] {
+  if (is.array(filter)) {
+    return filter;
+  }
+  if (is.string(filter)) {
+    return [filter];
+  }
+  return [];
+}
+
 export function applyFilters(
   repos: string[],
   addFilters: string[],
   removeFilters: string[],
 ): string[] {
-  const applyFilter = (repos: string[], filter: string): string[] => {
-    const matched = new Set<string>();
-    let res: string[];
-    if (isConfigRegex(filter)) {
-      const autodiscoveryPred = configRegexPredicate(filter);
-      if (!autodiscoveryPred) {
-        throw new Error(`Failed to parse regex pattern "${filter}"`);
-      }
-      res = repos.filter(autodiscoveryPred);
-    } else {
-      res = repos.filter(minimatch.filter(filter, { dot: true, nocase: true }));
-    }
-    for (const repository of res) {
-      matched.add(repository);
-    }
-    return [...matched];
-  };
-
   const matched = addFilters.flatMap((filter) => applyFilter(repos, filter));
   const removeMatched = removeFilters.flatMap((filter) =>
     applyFilter(matched, filter),
   );
 
   return [...matched.filter((matched) => !removeMatched.includes(matched))];
+}
+
+function applyFilter(repos: string[], filter: string): string[] {
+  const matched = new Set<string>();
+  let res: string[];
+  if (isConfigRegex(filter)) {
+    const autodiscoveryPred = configRegexPredicate(filter);
+    if (!autodiscoveryPred) {
+      throw new Error(`Failed to parse regex pattern "${filter}"`);
+    }
+    res = repos.filter(autodiscoveryPred);
+  } else {
+    res = repos.filter(minimatch.filter(filter, { dot: true, nocase: true }));
+  }
+  for (const repository of res) {
+    matched.add(repository);
+  }
+  return [...matched];
 }
